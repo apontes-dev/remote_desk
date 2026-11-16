@@ -1,0 +1,12 @@
+# Core (required)
+mss>=9.0.1
+Pillow>=10.0.0
+
+# Input injection (required for remote control; omit for a view-only host)
+pynput>=1.7.6
+
+# Optional: clipboard sync
+pyperclip>=1.8.2
+
+# Optional: only needed if you start the server with --tls
+cryptography>=42.0.0
