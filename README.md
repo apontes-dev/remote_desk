@@ -5,6 +5,11 @@ app (`RemoteDesktopHost.exe`, no install, no admin) with a window for the
 password, the **LAN ⟷ Internet** toggle, and trusted-computer approvals. It's the
 recommended host. The folders below are the script-based / headless equivalents.
 
+**On a Mac?** Use [`macos-app/`](macos-app/) — a native macOS app
+(`Remote Desktop Host.app`, Swift/SwiftUI) with the same window features
+(password, LAN ⟷ Internet, trusted computers, clipboard & files) and the same
+browser viewer. macOS 13+, Apple silicon and Intel.
+
 All builds are connected from an ordinary **web browser** (so the viewing
 machine never installs anything):
 
@@ -41,6 +46,8 @@ host's URL. The host enters a password that gates viewing and control.
 - **You want a double-click GUI app** → `host-exe/`. Native `.exe`, no install,
   no admin; password + LAN/Internet toggle + trusted computers in a window. This
   is the one most people want.
+- **The host is a Mac** → `macos-app/`. Native `.app`, no install, no admin;
+  grant Screen Recording + Accessibility once.
 - **Restricted machine, and Windows Defender does not block scripts** →
   `portable/`. Pure PowerShell, nothing to fetch at all. Copy, double-click
   `Start-Host.cmd`, done.

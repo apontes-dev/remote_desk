@@ -16,3 +16,6 @@ __pycache__/
 *.pyc
 *.obj
 *.pdb
+
+# macOS app build output
+macos-app/build/

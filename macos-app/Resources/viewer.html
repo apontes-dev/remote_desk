@@ -1,0 +1,97 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Remote Desktop</title>
+<style>
+ :root{--bg:#0b0d10;--fg:#e8eaed;--accent:#3b82f6;--bar:#15181d;--mut:#9aa0a6}
+ *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
+  font-family:system-ui,Segoe UI,sans-serif;overflow:hidden}
+ #login{display:flex;align-items:center;justify-content:center;height:100%}
+ .card{background:var(--bar);padding:28px 32px;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.5);width:320px}
+ h1{font-size:18px;margin:0 0 4px}.sub{font-size:13px;color:var(--mut);margin:0 0 18px}
+ input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #2a2f37;background:#0b0d10;color:var(--fg);font-size:14px;margin-bottom:12px}
+ button,.btn{background:var(--accent);color:#fff;border:0;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer}
+ .btn.sec{background:#2a2f37}.err{color:#f87171;font-size:12px;min-height:16px}
+ #app{display:none;flex-direction:column;height:100%}
+ #bar{display:flex;align-items:center;gap:10px;background:var(--bar);padding:6px 10px;font-size:12px;flex:0 0 auto}
+ #bar .dot{width:9px;height:9px;border-radius:50%;background:#f59e0b}#bar .dot.ok{background:#22c55e}#bar .sp{flex:1}
+ #bar label{color:var(--mut);display:flex;align-items:center;gap:4px}
+ #stage{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#000}
+ #screen{max-width:100%;max-height:100%;display:block;cursor:none}
+ #drawer{position:fixed;right:0;top:0;height:100%;width:330px;background:var(--bar);
+  box-shadow:-8px 0 30px rgba(0,0,0,.5);transform:translateX(100%);transition:transform .2s;padding:16px;overflow:auto;z-index:5}
+ #drawer.open{transform:translateX(0)}
+ #drawer h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:18px 0 8px}
+ textarea{width:100%;height:110px;background:#0b0d10;color:var(--fg);border:1px solid #2a2f37;border-radius:8px;padding:8px;font-size:13px;resize:vertical}
+ .filelist{font-size:13px}.filelist .row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #22262d}
+ .filelist a{color:var(--accent);text-decoration:none;word-break:break-all}.muted{color:var(--mut);font-size:12px}
+ .drawhead{display:flex;justify-content:space-between;align-items:center}
+</style></head><body>
+ <div id="login"><div class="card"><h1>Remote Desktop</h1>
+  <p class="sub">Enter the access password shown on the host.</p>
+  <input id="pw" type="password" placeholder="Password" autocomplete="off">
+  <div class="err" id="loginErr"></div><button id="connectBtn" style="width:100%">Connect</button></div></div>
+ <div id="app"><div id="bar"><span class="dot" id="dot"></span><span id="status">connecting...</span>
+   <span class="sp"></span><label>View only <input type="checkbox" id="viewOnly"></label>
+   <span class="btn sec" id="toolsBtn">Tools</span>
+   <span class="btn sec" id="fsBtn">Fullscreen</span></div>
+  <div id="stage"><img id="screen" draggable="false"></div></div>
+ <div id="drawer">
+  <div class="drawhead"><strong>Tools</strong><span class="btn sec" id="closeDrawer">Close</span></div>
+  <h2>Clipboard</h2>
+  <textarea id="clip" placeholder="Shared clipboard text..."></textarea>
+  <div style="display:flex;gap:8px;margin-top:8px">
+   <button class="btn sec" id="clipPull">Pull from host</button>
+   <button class="btn" id="clipPush">Push to host</button></div>
+  <h2>Files</h2>
+  <div class="muted">Shared folder on the host.</div>
+  <div class="filelist" id="files"></div>
+  <div style="margin-top:8px"><input type="file" id="fileInput" style="font-size:12px">
+   <button class="btn" id="uploadBtn" style="margin-top:6px">Upload to host</button></div>
+ </div>
+<script>
+const $=s=>document.querySelector(s);
+async function session(){try{return await (await fetch("/session",{cache:"no-store"})).json();}catch(e){return{authed:false};}}
+async function boot(){const s=await session(); if(s.authed){showApp(s);}else{$("#login").style.display="flex";}}
+$("#connectBtn").onclick=login; $("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")login();});
+async function login(){const pw=$("#pw").value.trim(); if(!pw)return; $("#loginErr").textContent=""; $("#connectBtn").disabled=true;
+ try{const r=await fetch("/auth",{method:"POST",body:pw}); if(!r.ok)throw new Error(r.status===429?"Too many attempts":"Wrong password");
+  const s=await session(); showApp(s);}catch(e){$("#loginErr").textContent=e.message||"Failed"; $("#connectBtn").disabled=false;}}
+function showApp(s){$("#login").style.display="none"; $("#app").style.display="flex";
+ $("#viewOnly").checked=!!s.viewOnly; $("#viewOnly").disabled=!!s.viewOnly; beginStream(); wireInput(); wireTools();}
+function beginStream(){const img=$("#screen");
+ img.onload=()=>{$("#dot").classList.add("ok");$("#status").textContent="connected";};
+ img.onerror=()=>{$("#dot").classList.remove("ok");$("#status").textContent="reconnecting...";setTimeout(()=>img.src="/stream?_="+Date.now(),1000);};
+ img.src="/stream?_="+Date.now();}
+let sending=false,queue=[];
+async function flush(){if(sending||!queue.length)return;sending=true;const b=queue;queue=[];
+ try{await fetch("/input",{method:"POST",body:JSON.stringify(b)});}catch(e){}sending=false;if(queue.length)flush();}
+function send(ev){if($("#viewOnly").checked)return;queue.push(ev);if(queue.length>50)queue.shift();flush();}
+function coords(e){const img=$("#screen"),r=img.getBoundingClientRect();
+ return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};}
+function wireInput(){const img=$("#screen");let last=0;
+ img.addEventListener("mousemove",e=>{const n=performance.now();if(n-last<25)return;last=n;const c=coords(e);send({t:"move",x:c.x,y:c.y});});
+ img.addEventListener("mousedown",e=>{e.preventDefault();const c=coords(e);send({t:"down",x:c.x,y:c.y,b:e.button});});
+ window.addEventListener("mouseup",e=>{const c=coords(e);send({t:"up",x:c.x,y:c.y,b:e.button});});
+ img.addEventListener("contextmenu",e=>e.preventDefault());
+ img.addEventListener("wheel",e=>{e.preventDefault();send({t:"wheel",dy:-e.deltaY,dx:-e.deltaX});},{passive:false});
+ window.addEventListener("keydown",e=>{if($("#app").style.display==="none")return;if($("#clip")===document.activeElement)return;e.preventDefault();
+  if(e.key.length===1&&!e.ctrlKey&&!e.altKey&&!e.metaKey)send({t:"char",c:e.key});else send({t:"key",k:e.key,down:true});});
+ window.addEventListener("keyup",e=>{if($("#app").style.display==="none")return;if($("#clip")===document.activeElement)return;e.preventDefault();
+  if(!(e.key.length===1&&!e.ctrlKey&&!e.altKey&&!e.metaKey))send({t:"key",k:e.key,down:false});});
+ $("#fsBtn").onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();}
+function wireTools(){
+ $("#toolsBtn").onclick=()=>$("#drawer").classList.toggle("open");
+ $("#closeDrawer").onclick=()=>$("#drawer").classList.remove("open");
+ $("#clipPull").onclick=async()=>{try{$("#clip").value=(await (await fetch("/clipboard",{cache:"no-store"})).json()).text;}catch(e){}};
+ $("#clipPush").onclick=()=>fetch("/clipboard",{method:"POST",body:JSON.stringify({text:$("#clip").value})});
+ $("#uploadBtn").onclick=uploadFile; refreshFiles();}
+async function refreshFiles(){try{const d=await (await fetch("/files",{cache:"no-store"})).json();
+ const el=$("#files");el.innerHTML="";(d.files||[]).forEach(f=>{const row=document.createElement("div");row.className="row";
+  const a=document.createElement("a");a.href="/download?name="+encodeURIComponent(f.name);a.textContent=f.name;a.download=f.name;
+  const sz=document.createElement("span");sz.className="muted";sz.textContent=Math.max(1,Math.round(f.size/1024))+" KB";
+  row.appendChild(a);row.appendChild(sz);el.appendChild(row);});
+ if(!d.files||!d.files.length)el.innerHTML='<div class="muted">No files yet.</div>';}catch(e){}}
+async function uploadFile(){const f=$("#fileInput").files[0];if(!f)return;
+ await fetch("/upload?name="+encodeURIComponent(f.name),{method:"POST",body:await f.arrayBuffer()});
+ $("#fileInput").value="";refreshFiles();}
+boot();
+</script></body></html>
